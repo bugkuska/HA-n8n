@@ -1,0 +1,19 @@
+type: masonry
+title: PZEM016-DATA
+path: pzem016-data
+cards:
+  - type: entities
+    entities:
+      - entity: sensor.esp32_pzem016_powermon_current
+        name: Current
+      - entity: sensor.esp32_pzem016_powermon_frequency
+        name: Frequency
+      - entity: sensor.esp32_pzem016_powermon_power
+        name: Power
+      - entity: sensor.esp32_pzem016_powermon_power_factor
+        name: Power Factor
+      - entity: sensor.esp32_pzem016_powermon_total_daily_energy
+        name: Total Daily Energy
+      - entity: sensor.esp32_pzem016_powermon_voltage
+        name: Voltage
+    title: esp32-pzem016-powermon
