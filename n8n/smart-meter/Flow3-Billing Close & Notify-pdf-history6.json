@@ -1,0 +1,715 @@
+{
+  "name": "Flow3-Billing Close & Notify-pdf-history6",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "mode": "custom",
+              "cronExpression": "5 0 15 * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        -416
+      ],
+      "id": "bc9a02d5-acb9-4827-9369-0ed4833727f9",
+      "name": "CRON | Monthly 15th 00:05"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY",
+          "mode": "list",
+          "cachedResultName": "power_meter_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 919573753,
+          "mode": "list",
+          "cachedResultName": "pea_cycle_summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY/edit#gid=919573753"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "cycle_key",
+              "lookupValue": "={{ $json.cycle_key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -480,
+        -160
+      ],
+      "id": "aaf634f7-5d27-4c96-a160-b9b1aabb3518",
+      "name": "GS | Find Cycle Summary",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleApi": {
+          "id": "HjMRmBLbJigs0y41",
+          "name": "Google Sheets account-ha-n8n-power-meter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3af957ce-8918-4946-8bad-260d02081f8f",
+              "leftValue": "={{ !!$items(\"GS | Find Cycle Summary\")[0]?.json?.row_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -208,
+        -160
+      ],
+      "id": "a0f03404-5dda-4c90-a4cd-3bb3fa37970b",
+      "name": "IF | Summary Exists?",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "214cf1c9-1da6-4ac4-8b5c-71223ee2dfa2",
+              "name": "message",
+              "value": "no summary row for cycle_key",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -240,
+        32
+      ],
+      "id": "960f2677-12e3-4d82-84db-7ae4d9e4f17c",
+      "name": "LOG | No Summary Row - Skipped"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $json;\n\nreturn [{\n  cycle_key: row.cycle_key,\n  billing_period_th: row.billing_period,   // ✔️ ชื่อจริง\n  energy_kwh: Number(row.kwh_cycle || 0),  // ✔️\n  base_cost: Number(row.base_cost || 0),\n  ft_cost: Number(row.ft_cost || 0),\n  ft_rate: Number(row.ft_rate || 0),\n  service_cost: Number(row.service_charge || 0), // ✔️\n  vat_cost: Number(row.vat_7_percent || 0),      // ✔️\n  total_cost: Number(row.total_cost || 0),\n  generated_at: new Date().toISOString()\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -384
+      ],
+      "id": "9c89d809-317d-4ba3-a364-d85029eb411a",
+      "name": "Code | Build Report Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\n\n// เวลาไทย (Asia/Bangkok)\nconst generatedTh = d.last_update_ts\n  ? new Date(d.last_update_ts).toLocaleString(\"th-TH\", { timeZone: \"Asia/Bangkok\" })\n  : (d.generated_at\n      ? new Date(d.generated_at).toLocaleString(\"th-TH\", { timeZone: \"Asia/Bangkok\" })\n      : new Date().toLocaleString(\"th-TH\", { timeZone: \"Asia/Bangkok\" }));\n\n// helper: number format (กัน NaN)\nconst n = (v, digits = 2) => {\n  const num = Number(v);\n  return Number.isFinite(num) ? num.toFixed(digits) : (0).toFixed(digits);\n};\n\n// helper: string safe\nconst s = (v) => (v ?? \"\").toString().trim();\n\n// =====================\n// ✅ Safe fallback source (กรณี field บางตัวอยู่ใน history_6)\n// =====================\nconst h0 = Array.isArray(d.history_6) && d.history_6.length ? d.history_6[0] : {};\n\n// =====================\n// ✅ Map field (รองรับชื่อคอลัมน์จาก pea_cycle_summary)\n// =====================\nconst period = s(d.billing_period_th || d.billing_period || h0.billing_period_th || h0.billing_period);\nconst kwh = Number(d.energy_kwh ?? d.kwh_cycle ?? h0.energy_kwh ?? h0.kwh_cycle ?? 0);\n\nconst base = Number(d.base_cost ?? h0.base_cost ?? 0);\nconst ftCost = Number(d.ft_cost ?? h0.ft_cost ?? 0);\nconst ftRate = Number(d.ft_rate ?? h0.ft_rate ?? 0);\n\nconst service = Number(d.service_cost ?? d.service_charge ?? h0.service_cost ?? h0.service_charge ?? 0);\nconst subBeforeVat = Number(d.subtotal_before_vat ?? h0.subtotal_before_vat ?? (base + service + ftCost));\n\nconst vat = Number(d.vat_cost ?? d.vat_7_percent ?? h0.vat_cost ?? h0.vat_7_percent ?? 0);\nconst total = Number(d.total_cost ?? h0.total_cost ?? 0);\n\n// =====================\n// ✅ History table rows (ย้อนหลัง 6 รอบ)\n// =====================\nconst history = Array.isArray(d.history_6) ? d.history_6 : [];\nconst historyRows = history.length\n  ? history.map((h, i) => {\n      const hp = s(h.billing_period_th || h.billing_period);\n      const hkwh = Number(h.energy_kwh ?? h.kwh_cycle ?? 0);\n      const htotal = Number(h.total_cost ?? 0);\n      return `\n        <tr>\n          <td class=\"c\">${i + 1}</td>\n          <td class=\"l\">${hp}</td>\n          <td class=\"r\">${n(hkwh, 4)}</td>\n          <td class=\"r\">${n(htotal, 2)}</td>\n        </tr>\n      `;\n    }).join(\"\")\n  : `\n      <tr>\n        <td colspan=\"4\" class=\"c muted\">ยังไม่มีข้อมูลประวัติการใช้ไฟย้อนหลัง</td>\n      </tr>\n    `;\n\nconst html = `<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"utf-8\" />\n  <style>\n    @page { margin: 22px; }\n\n    body{\n      font-family: \"Noto Sans Thai\", Arial, sans-serif;\n      font-size: 12.5px;\n      line-height: 1.45;\n      color: #111;\n    }\n\n    /* ===== Header (PEA-like) ===== */\n    .header{\n      display:flex;\n      align-items:flex-start;\n      justify-content:space-between;\n      gap: 12px;\n      padding-bottom: 8px;\n      border-bottom: 2px solid #b71c1c;\n      margin-bottom: 10px;\n    }\n\n    .brand{\n      display:flex;\n      gap:10px;\n      align-items:flex-start;\n    }\n\n    .logo{\n      width:34px;\n      height:34px;\n      border-radius: 50%;\n      border: 1px solid #b71c1c;\n      display:flex;\n      align-items:center;\n      justify-content:center;\n      font-weight:800;\n      color:#b71c1c;\n      font-size: 12px;\n    }\n\n    .brand-title{\n      font-size: 14.5px;\n      font-weight: 800;\n      margin: 0;\n    }\n\n    .brand-sub{\n      font-size: 11.5px;\n      color:#555;\n      margin-top: 2px;\n    }\n\n    .doc-title{\n      text-align:right;\n    }\n\n    .doc-title .t1{\n      font-size: 14.5px;\n      font-weight: 800;\n      margin: 0;\n    }\n\n    .doc-title .t2{\n      font-size: 11.5px;\n      color:#555;\n      margin-top: 2px;\n    }\n\n    /* ===== Info block ===== */\n    .info{\n      border: 1px solid #cfcfcf;\n      background: #fafafa;\n      border-radius: 6px;\n      padding: 10px 12px;\n      margin: 10px 0 12px 0;\n    }\n\n    .info-grid{\n      display:grid;\n      grid-template-columns: 1fr 1fr;\n      gap: 6px 18px;\n    }\n\n    .row{\n      display:flex;\n      gap: 8px;\n      align-items:flex-start;\n    }\n\n    .label{\n      min-width: 130px;\n      font-weight: 700;\n      color:#333;\n      white-space: nowrap;\n    }\n\n    .value{\n      color:#111;\n      flex:1;\n      word-break: break-word;\n    }\n\n    /* ===== Tables ===== */\n    table{\n      width:100%;\n      border-collapse: collapse;\n      margin-top: 10px;\n    }\n\n    th, td{\n      border: 1px solid #cfcfcf;\n      padding: 8px 9px;\n    }\n\n    th{\n      background: #f2f2f2;\n      text-align:left;\n      font-weight: 800;\n    }\n\n    .bill th{ width: 68%; }\n    .bill td{ width: 32%; }\n\n    td{ text-align:right; }\n\n    .total-row th, .total-row td{\n      background: #fff3e0;\n      font-weight: 900;\n      border-top: 2px solid #b71c1c;\n    }\n\n    /* ✅ note ควรเป็น inline (ไม่ใช้ margin-top) */\n    .note{\n      font-size: 11px;\n      color:#555;\n      font-weight: 600;\n      display: inline;\n      margin-left: 6px;\n    }\n\n    /* History table */\n    .section-title{\n      margin-top: 14px;\n      font-weight: 900;\n      font-size: 12.5px;\n      border-left: 4px solid #b71c1c;\n      padding-left: 8px;\n    }\n\n    .history th{\n      background: #f6f6f6;\n    }\n\n    .c{ text-align:center; }\n    .l{ text-align:left; }\n    .r{ text-align:right; }\n    .muted{ color:#777; }\n\n    .footer{\n      margin-top: 12px;\n      padding-top: 8px;\n      border-top: 1px dashed #bbb;\n      font-size: 11px;\n      color:#555;\n      display:flex;\n      justify-content:space-between;\n      gap: 10px;\n    }\n\n    .stamp{\n      text-align:right;\n      color:#b71c1c;\n      font-weight: 800;\n      letter-spacing: .2px;\n    }\n  </style>\n</head>\n<body>\n\n  <!-- ===== Header ===== -->\n  <div class=\"header\">\n    <div class=\"brand\">\n      <div class=\"logo\">PEA</div>\n      <div>\n        <div class=\"brand-title\">การไฟฟ้าส่วนภูมิภาค (PEA)</div>\n        <div class=\"brand-sub\">Provincial Electricity Authority</div>\n      </div>\n    </div>\n    <div class=\"doc-title\">\n      <div class=\"t1\">ใบแจ้งค่าไฟฟ้า</div>\n      <div class=\"t2\">Electricity Bill Summary</div>\n    </div>\n  </div>\n\n  <!-- ===== Customer / Meter Info ===== -->\n  <div class=\"info\">\n    <div class=\"info-grid\">\n      <div class=\"row\">\n        <div class=\"label\">ชื่อผู้ใช้ไฟฟ้า</div>\n        <div class=\"value\">${s(d.customer_name) || \"-\"}</div>\n      </div>\n      <div class=\"row\">\n        <div class=\"label\">รอบบิล</div>\n        <div class=\"value\"><b>${period || \"-\"}</b></div>\n      </div>\n\n      <div class=\"row\">\n        <div class=\"label\">สถานที่ใช้ไฟฟ้า</div>\n        <div class=\"value\">${s(d.location) || \"-\"}</div>\n      </div>\n      <div class=\"row\">\n        <div class=\"label\">หมายเลขมิเตอร์</div>\n        <div class=\"value\">${s(d.meter_id) || \"-\"}</div>\n      </div>\n\n      <div class=\"row\">\n        <div class=\"label\">รหัสรอบบิล</div>\n        <div class=\"value\">${s(d.cycle_key) || \"-\"}</div>\n      </div>\n      <div class=\"row\">\n        <div class=\"label\">วันที่อัปเดต</div>\n        <div class=\"value\">${generatedTh}</div>\n      </div>\n    </div>\n  </div>\n\n  <!-- ===== Bill Summary Table ===== -->\n  <table class=\"bill\">\n    <tr><th>พลังงานไฟฟ้า (kWh)</th><td>${n(kwh, 4)}</td></tr>\n    <tr><th>ค่าไฟฐาน</th><td>${n(base, 2)}</td></tr>\n    <tr>\n      <th>ค่า FT <span class=\"note\">(อัตรา ${n(ftRate, 4)} บาท/หน่วย)</span></th>\n      <td>${n(ftCost, 2)}</td>\n    </tr>\n    <tr><th>ค่าบริการรายเดือน</th><td>${n(service, 2)}</td></tr>\n    <tr><th>รวมก่อนภาษี</th><td>${n(subBeforeVat, 2)}</td></tr>\n    <tr><th>ภาษีมูลค่าเพิ่ม (VAT 7%)</th><td>${n(vat, 2)}</td></tr>\n    <tr class=\"total-row\"><th>รวมเงินที่ต้องชำระทั้งสิ้น</th><td>${n(total, 2)}</td></tr>\n  </table>\n\n  <!-- ===== History Section ===== -->\n  <div class=\"section-title\">ประวัติการใช้ไฟฟ้าย้อนหลัง (สูงสุด 6 รอบบิลล่าสุด)</div>\n  <table class=\"history\">\n    <tr>\n      <th style=\"width:10%\">ลำดับ</th>\n      <th style=\"width:50%\">รอบบิล</th>\n      <th style=\"width:20%\">พลังงาน (kWh)</th>\n      <th style=\"width:20%\">ค่าไฟ (บาท)</th>\n    </tr>\n    ${historyRows}\n  </table>\n\n  <!-- ===== Footer ===== -->\n  <div class=\"footer\">\n    <div>\n      หมายเหตุ: เอกสารนี้สร้างโดยระบบอัตโนมัติ (n8n) เพื่อการแจ้งเตือนและสรุปข้อมูล ไม่ใช่ใบแจ้งหนี้ทางการของ PEA\n    </div>\n    <div class=\"stamp\">\n      AUTO-GENERATED\n    </div>\n  </div>\n\n</body>\n</html>`;\n\nreturn [{ data: html }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        -16
+      ],
+      "id": "0bed526b-27dd-43c6-be46-51b28acef5d3",
+      "name": "Code | Build HTML Template"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = new Date();\nconst ym = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;\n\nreturn [{\n  site: 'MSUSmartFarm',\n  device: 'PZEM016',\n  cycle_key: `MSUSmartFarm|PZEM016|${ym}`\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        -416
+      ],
+      "id": "9cbd60ce-21b6-45db-acb3-badc5061a35e",
+      "name": "Code | Build cycle_key (closing)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $json;\n\n// fallback: ถ้า ft_rate/ft_cost อยู่ใน history_6 ก็เอามาใช้\nconst h0 = Array.isArray(d.history_6) && d.history_6.length ? d.history_6[0] : {};\n\nconst n = (v, digit = 2) => {\n  const num = Number(v);\n  return Number.isFinite(num) ? num.toFixed(digit) : \"0.00\";\n};\nconst s = (v) => (v ?? \"-\").toString();\n\nconst billing = s(d.billing_period_th || d.billing_period || h0.billing_period_th || h0.billing_period);\nconst energy = d.energy_kwh ?? d.kwh_cycle ?? h0.energy_kwh ?? h0.kwh_cycle ?? 0;\n\nconst base = d.base_cost ?? h0.base_cost ?? 0;\nconst service = d.service_cost ?? d.service_charge ?? h0.service_cost ?? h0.service_charge ?? 0;\n\nconst ftRate = d.ft_rate ?? h0.ft_rate ?? 0;        // ✅ แก้หลัก: fallback\nconst ftCost = d.ft_cost ?? h0.ft_cost ?? 0;        // ✅ แก้หลัก: fallback\n\nconst vat = d.vat_cost ?? d.vat_7_percent ?? h0.vat_cost ?? h0.vat_7_percent ?? 0;\nconst total = d.total_cost ?? h0.total_cost ?? 0;\n\nconst message =\n`📊 สรุปค่าไฟฟ้ารายเดือน\nรอบบิล: ${billing}\n\n⚡ พลังงานไฟฟ้า: ${n(energy, 4)} kWh\n💰 ค่าไฟฐาน: ${n(base, 2)} บาท\n🔁 ค่า FT (อัตรา ${n(ftRate, 4)} บาท/หน่วย): ${n(ftCost, 2)} บาท\n🧾 ค่าบริการรายเดือน: ${n(service, 2)} บาท\n🧮 ภาษีมูลค่าเพิ่ม (VAT 7%): ${n(vat, 2)} บาท\n\n✅ รวมทั้งสิ้น: ${n(total, 2)} บาท\n\n📄 ใบแจ้งค่าไฟฟ้า (PDF)\n${s(d.pdf_url)}`;\n\nreturn [{ message }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2192,
+        -368
+      ],
+      "id": "38d623a7-4c53-4b75-ac6c-0b4d352f1688",
+      "name": "Code | Build LINE Message"
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.message }}",
+        "replyToken": "=",
+        "targetRecipient": "={{ $('Set (LINE Target)').item.json.toId }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessaging",
+      "typeVersion": 1,
+      "position": [
+        2656,
+        -16
+      ],
+      "id": "2541ae10-e623-488c-8571-c117a2affc79",
+      "name": "LineMessaging-SendMessage",
+      "credentials": {
+        "lineMessagingAuthApi": {
+          "id": "WT3wCk9QTNKg04ul",
+          "name": "Line-Message-PEA-Summary-Noti"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "toId",
+              "value": "=U75423c4a49a67c07bfb2852e7389d6ff"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set (LINE Target)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        2176,
+        -16
+      ],
+      "id": "6bd5d271-7b51-4006-982c-5ec12eca7a73",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.message }}"
+      },
+      "type": "n8n-nodes-linewebhook.LineMessageNode",
+      "typeVersion": 1,
+      "position": [
+        2416,
+        -16
+      ],
+      "id": "c9773c42-74cb-4954-87dd-369303b80645",
+      "name": "LineMessageNode"
+    },
+    {
+      "parameters": {
+        "content": "## 📣 Flow 3 : Billing Close & Notify (ปิดรอบบิล + แจ้งเตือน)",
+        "height": 736,
+        "width": 3504,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -592,
+        -512
+      ],
+      "typeVersion": 1,
+      "id": "f2a2eb16-f466-407f-aa3c-b46526a56aa9",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "data",
+        "options": {
+          "fileName": "index.html"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        -16
+      ],
+      "id": "299a7db3-7e71-4b07-b7ce-747f211a0690",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://gotenberg:3000/forms/chromium/convert/html",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1216,
+        -16
+      ],
+      "id": "b7f7027c-2820-4bd9-86b3-8f1c47683ae9",
+      "name": "HTTP Request (Gotenberg)"
+    },
+    {
+      "parameters": {
+        "name": "=Electric_Bill_{{$node[\"Code | Build Report Data\"].json.billing_period_th}}.pdf",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive",
+          "cachedResultUrl": "https://drive.google.com/drive/my-drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "1J5Oh23irbzW3bBWYAZuatBVTgdkbzcRq",
+          "mode": "list",
+          "cachedResultName": "PEA_Bill",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1J5Oh23irbzW3bBWYAZuatBVTgdkbzcRq"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1424,
+        -16
+      ],
+      "id": "ba4a02b5-578e-4b07-94a2-eb490c5e89c6",
+      "name": "Upload file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "P9Z5kOmIoUPoIB2L",
+          "name": "Google Drive account-OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "share",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "permissionsUi": {
+          "permissionsValues": {
+            "role": "reader",
+            "type": "anyone"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1648,
+        -16
+      ],
+      "id": "9021c0d2-061d-4a50-ba68-3fb6fd1277cd",
+      "name": "Google Drive – Share (Permission)",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "P9Z5kOmIoUPoIB2L",
+          "name": "Google Drive account-OAuth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fddf89d4-8564-4adb-8d60-c7a460789b83",
+              "name": "pdf_url",
+              "value": "={{$node[\"Upload file\"].json.webViewLink}}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1856,
+        -16
+      ],
+      "id": "d3b57dc7-30f1-4fb2-94bc-807460b70a03",
+      "name": "Set pdf_url"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1984,
+        -368
+      ],
+      "id": "399d14fe-1493-4a45-8def-0ef5b655023c",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6c0f1aec-d5d3-465c-9c04-7230aa165c4f",
+              "name": "customer_name",
+              "value": "นาย สมโภช ทองน้ำเที่ยง",
+              "type": "string"
+            },
+            {
+              "id": "36f67003-2d2b-4dda-90d6-10997089e80d",
+              "name": "location",
+              "value": "579/4 หมู่ที่ 20 ต.ขามเรียง อ.กันทรวิชัย จ.มหาสารคาม",
+              "type": "string"
+            },
+            {
+              "id": "bdf9dd10-e46d-4139-baa1-c6cf684c6435",
+              "name": "meter_id",
+              "value": "6201352349",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        -16
+      ],
+      "id": "040bee21-3e92-40e0-829b-c2f315d4082a",
+      "name": "SET | Bill Metadata"
+    },
+    {
+      "parameters": {
+        "authentication": "serviceAccount",
+        "documentId": {
+          "__rl": true,
+          "value": "1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY",
+          "mode": "list",
+          "cachedResultName": "power_meter_logger",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 919573753,
+          "mode": "list",
+          "cachedResultName": "pea_cycle_summary",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1EU2z4oDA9TtLifjMSg3yWb5m8KUNISaxntUZcYImLfY/edit#gid=919573753"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "detectAutomatically"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        48,
+        -16
+      ],
+      "id": "30b40f45-63ff-4085-b8ff-d20999297f1e",
+      "name": "GS | Read Cycle History (last 6)",
+      "credentials": {
+        "googleApi": {
+          "id": "HjMRmBLbJigs0y41",
+          "name": "Google Sheets account-ha-n8n-power-meter"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// items = แถวที่อ่านมาจาก GS | Read Cycle History (last 6)\nconst rows = items.map(i => i.json);\n\n// ดึงข้อมูลบิลหลักจาก Code | Build Report Data (นี่แหละที่ต้องเอามาด้วย)\nconst report = $node[\"Code | Build Report Data\"].json;\n\n// filter ตาม site/device (ถ้า report ไม่มี site/device ก็ไม่เป็นไร ใช้ทุกแถว)\nconst filtered = rows\n  .filter(r => (!report.site || r.site === report.site) && (!report.device || r.device === report.device))\n  .sort((a, b) => new Date(b.last_update_ts) - new Date(a.last_update_ts))\n  .slice(0, 6);\n\nreturn [\n  {\n    json: {\n      ...report,          // ✅ บิลหลัก (billing_period_th, energy_kwh, base_cost, service_cost, vat_cost, total_cost, generated_at, cycle_key)\n      history_6: filtered // ✅ ประวัติย้อนหลัง\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -16
+      ],
+      "id": "a68c8f0c-a426-45c9-8dbb-13f68ff340cc",
+      "name": "Code | Build History Array"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "CRON | Monthly 15th 00:05": {
+      "main": [
+        [
+          {
+            "node": "Code | Build cycle_key (closing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS | Find Cycle Summary": {
+      "main": [
+        [
+          {
+            "node": "IF | Summary Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF | Summary Exists?": {
+      "main": [
+        [
+          {
+            "node": "Code | Build Report Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LOG | No Summary Row - Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build Report Data": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GS | Read Cycle History (last 6)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build HTML Template": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build cycle_key (closing)": {
+      "main": [
+        [
+          {
+            "node": "GS | Find Cycle Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build LINE Message": {
+      "main": [
+        [
+          {
+            "node": "Set (LINE Target)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (LINE Target)": {
+      "main": [
+        [
+          {
+            "node": "LineMessageNode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LineMessageNode": {
+      "main": [
+        [
+          {
+            "node": "LineMessaging-SendMessage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (Gotenberg)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request (Gotenberg)": {
+      "main": [
+        [
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload file": {
+      "main": [
+        [
+          {
+            "node": "Google Drive – Share (Permission)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Drive – Share (Permission)": {
+      "main": [
+        [
+          {
+            "node": "Set pdf_url",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set pdf_url": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code | Build LINE Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SET | Bill Metadata": {
+      "main": [
+        [
+          {
+            "node": "Code | Build HTML Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GS | Read Cycle History (last 6)": {
+      "main": [
+        [
+          {
+            "node": "Code | Build History Array",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code | Build History Array": {
+      "main": [
+        [
+          {
+            "node": "SET | Bill Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "657dd084-dd2f-44f5-a5bb-436edd144ae5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "6e8bd4e6dcfe2d257f6d9648f4efaf76882daef04e1402d554d9aae9132bba97"
+  },
+  "id": "BnMCLFcZJU8MtiDb",
+  "tags": []
+}
