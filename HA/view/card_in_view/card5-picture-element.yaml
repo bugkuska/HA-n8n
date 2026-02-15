@@ -47,11 +47,11 @@ elements:
       width: 60%
     camera_view: auto
     image:
-      media_content_id: media-source://image_upload/caca79144c67239653094fd83e4c708d
+      media_content_id: media-source://image_upload/83e9056b44d4f7cc0421d1e8163b0cea
       media_content_type: image/gif
       metadata:
         title: disc.gif
-        thumbnail: /api/image/serve/caca79144c67239653094fd83e4c708d/256x256
+        thumbnail: /api/image/serve/83e9056b44d4f7cc0421d1e8163b0cea/256x256
         media_class: image
         navigateIds:
           - {}
@@ -74,7 +74,7 @@ elements:
       color: white
       font-weight: bold
   - type: state-label
-    entity: sensor.monthly_energy_pea_display
+    entity: sensor.monthly_pea_display
     style:
       top: 83%
       left: 28%
@@ -82,7 +82,7 @@ elements:
       color: white
       font-weight: bold
   - type: state-label
-    entity: sensor.total_cost
+    entity: sensor.pea_total_cost
     style:
       top: 83%
       left: 70%
@@ -90,15 +90,13 @@ elements:
       color: white
       font-weight: bold
 image:
-  media_content_id: media-source://image_upload/d5a178c353508f9c83e4cef6f9d88234
+  media_content_id: media-source://image_upload/cd09de1d0fbcd40a3e913645a43d562e
   media_content_type: image/png
   metadata:
     title: smartmeter.png
-    thumbnail: /api/image/serve/d5a178c353508f9c83e4cef6f9d88234/256x256
+    thumbnail: /api/image/serve/cd09de1d0fbcd40a3e913645a43d562e/256x256
     media_class: image
     navigateIds:
       - {}
       - media_content_type: app
         media_content_id: media-source://image_upload
-grid_options:
-  columns: full
