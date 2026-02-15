@@ -25,7 +25,7 @@ entities:
     name: พลังงานสะสมวันนี้ (kWh)
     icon: mdi:calendar-today
     secondary_info: last-updated
-  - entity: sensor.monthly_energy_pea_display
+  - entity: sensor.monthly_pea_display
     name: พลังงานสะสมรอบบิล PEA (kWh)
     icon: mdi:calendar-sync
     secondary_info: last-changed
