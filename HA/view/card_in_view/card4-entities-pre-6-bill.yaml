@@ -45,5 +45,3 @@ entities:
   - entity: input_number.pea_bill_total_6
     name: งวดที่ 6 (เก่าสุด) – ค่าไฟ (บาท)
     icon: mdi:cash-check
-grid_options:
-  columns: full
